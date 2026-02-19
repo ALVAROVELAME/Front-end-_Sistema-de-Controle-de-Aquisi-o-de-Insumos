@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+
 
 export function ScrollArrow({ onClick }: { onClick: () => void }) {
   return (
