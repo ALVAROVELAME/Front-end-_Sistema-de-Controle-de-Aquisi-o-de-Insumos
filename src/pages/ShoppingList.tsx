@@ -1,300 +1,108 @@
-import { useState } from "react"
+﻿import { useState, useEffect } from "react"
 import { Layout } from "../components/Layout"
+import { api } from "../services/api"
 
 type Item = {
-  id: number
-  name: string
-  quantity: number
-  price: number
-  bought: boolean
+  _id: string
+  name: { value: string; checked: boolean }
+  quantity: { value: number; checked: boolean }
+  price: { value: number; checked: boolean }
+  purchased: boolean
 }
 
 export function ShoppingList() {
   const [items, setItems] = useState<Item[]>([])
-  const [name, setName] = useState("")
-  const [quantity, setQuantity] = useState("")
+  const [nameInput, setNameInput] = useState("")
+  const [quantityInput, setQuantityInput] = useState("")
   const [priceInput, setPriceInput] = useState("")
+  const [loading, setLoading] = useState(true)
 
-  function formatMoney(value: number) {
-    return value.toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
+  // 1. Carregar itens do banco (VM2 via VM1)
+  async function loadItems() {
+    try {
+      setLoading(true)
+      const response = await api.get("/items")
+      setItems(response.data)
+    } catch (err) {
+      console.error("Erro ao carrergar itens:", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function handlePriceChange(value: string) {
-    const digits = value.replace(/\D/g, "")
-    if (!digits) return setPriceInput("")
+  useEffect(() => { loadItems() }, [])
 
-    const numberValue = Number(digits) / 100
-    setPriceInput(formatMoney(numberValue))
-  }
+  // 2. Adicionar Item Real
+  async function addItem() {
+    if (!nameInput.trim()) return
 
-  function parseMoney(value: string) {
-    return Number(value.replace(/\./g, "").replace(",", "."))
-  }
-
-  function addItem() {
-    if (!name.trim()) return
-
-    const parsedQuantity = Number(quantity)
-    const parsedPrice = parseMoney(priceInput || "0")
-
-    const item: Item = {
-      id: Date.now(),
-      name,
-      quantity: parsedQuantity || 1,
-      price: parsedPrice || 0,
-      bought: false,
+    const newItem = {
+      name: { value: nameInput, checked: true },
+      quantity: { value: Number(quantityInput) || 1, checked: true },
+      price: { value: Number(priceInput.replace(",", ".")) || 0, checked: true },
+      purchased: false
     }
 
-    setItems([...items, item])
-
-    setName("")
-    setQuantity("")
-    setPriceInput("")
+    try {
+      const response = await api.post("/items", newItem)
+      setItems([...items, response.data])
+      setNameInput(""); setQuantityInput(""); setPriceInput("")
+    } catch (err) {
+      alert("Erro ao salvar item no banco.")
+    }
   }
 
-  function removeItem(id: number) {
-    setItems(items.filter(item => item.id !== id))
+  // 3. Alternar "Comprado" no Banco
+  async function toggleBought(id: string, currentStatus: boolean) {
+    try {
+      await api.put(`/items/${id}`, { purchased: !currentStatus })
+      setItems(items.map(item => 
+        item._id === id ? { ...item, purchased: !currentStatus } : item
+      ))
+    } catch (err) {
+      alert("Erro ao atualizar status.")
+    }
   }
 
-  function toggleBought(id: number) {
-    setItems(
-      items.map(item =>
-        item.id === id ? { ...item, bought: !item.bought } : item
-      )
-    )
+  // 4. Remover do Banco
+  async function removeItem(id: string) {
+    try {
+      await api.delete(`/items/${id}`)
+      setItems(items.filter(item => item._id !== id))
+    } catch (err) {
+      alert("Erro ao excluir.")
+    }
   }
 
-  const totalPendentes = items.reduce(
-    (sum, item) => item.bought ? sum : sum + item.price * item.quantity,
-    0
-  )
-
-  const totalComprados = items.reduce(
-    (sum, item) => item.bought ? sum + item.price * item.quantity : sum,
-    0
-  )
-
-  const pendingItems = items.filter(item => !item.bought)
-  const boughtItems = items.filter(item => item.bought)
-
-  function renderPendingItem(item: Item) {
-    const itemTotal = item.quantity * item.price
-
-    return (
-      <li
-        key={item.id}
-        className="grid grid-cols-[24px_1fr_1fr_1fr_1fr_24px]
-                   items-center bg-slate-800 px-4 py-3 rounded-lg gap-2"
-      >
-        {/* CHECKBOX FIXO */}
-        <div className="flex justify-center">
-          <input
-            type="checkbox"
-            checked={item.bought}
-            onChange={() => toggleBought(item.id)}
-          />
-        </div>
-
-        {/* ITEM FLEX */}
-        <span className="truncate">
-          {item.name}
-        </span>
-
-        {/* QTD FLEX */}
-        <span>
-          {item.quantity}
-        </span>
-
-        {/* PREÇO FLEX */}
-        <span className="whitespace-nowrap">
-          R$ {formatMoney(item.price)}
-        </span>
-
-        {/* TOTAL FLEX */}
-        <span className="font-semibold whitespace-nowrap">
-          R$ {formatMoney(itemTotal)}
-        </span>
-
-        {/* REMOVER FIXO */}
-        <div className="flex justify-end">
-          <button
-            onClick={() => removeItem(item.id)}
-            className="text-red-400 hover:text-red-300"
-          >
-            ✕
-          </button>
-        </div>
-      </li>
-    )
-  }
-
-  function renderBoughtItem(item: Item) {
-    const itemTotal = item.quantity * item.price
-
-    return (
-      <li
-        key={item.id}
-        className="grid grid-cols-[24px_1fr_1fr_1fr_24px]
-                   items-center bg-slate-800 px-4 py-3 rounded-lg gap-2 opacity-60"
-      >
-        {/* CHECKBOX FIXO */}
-        <div className="flex justify-center">
-          <input
-            type="checkbox"
-            checked={item.bought}
-            onChange={() => toggleBought(item.id)}
-          />
-        </div>
-
-        {/* ITEM + TOOLTIP */}
-        <div className="relative group">
-          <span className="line-through cursor-pointer truncate">
-            {item.name}
-          </span>
-
-          <div className="hidden lg:block absolute left-0 mt-2 w-40 bg-slate-900 text-sm rounded-lg p-2
-                          opacity-0 group-hover:opacity-100 transition pointer-events-none shadow-lg z-10">
-            <p>Total: R$ {formatMoney(itemTotal)}</p>
-          </div>
-        </div>
-
-        {/* QTD */}
-        <span className="line-through">
-          {item.quantity}
-        </span>
-
-        {/* PREÇO */}
-        <span className="line-through whitespace-nowrap">
-          R$ {formatMoney(item.price)}
-        </span>
-
-        {/* REMOVER FIXO */}
-        <div className="flex justify-end">
-          <button
-            onClick={() => removeItem(item.id)}
-            className="text-red-400 hover:text-red-300"
-          >
-            ✕
-          </button>
-        </div>
-      </li>
-    )
-  }
+  const formatMoney = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
 
   return (
     <Layout>
-      <h1 className="text-3xl font-bold mb-6">
-        Lista de Compras 🛒
-      </h1>
+      <h1 className="text-3xl font-bold mb-6">Lista de Compras Real 🛒</h1>
 
       <div className="flex flex-col lg:flex-row gap-6">
-
         <div className="flex-1">
-
-          {/* FORM */}
+          {/* FORMULÁRIO */}
           <div className="grid grid-cols-4 gap-2 mb-6">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Item"
-              className="px-4 py-2 rounded-lg bg-slate-800"
-            />
-
-            <input
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Qtd"
-              className="px-4 py-2 rounded-lg bg-slate-800"
-            />
-
-            <input
-              type="text"
-              value={priceInput}
-              onChange={(e) => handlePriceChange(e.target.value)}
-              placeholder="Preço"
-              className="px-4 py-2 rounded-lg bg-slate-800"
-            />
-
-            <button
-              onClick={addItem}
-              className="bg-indigo-600 rounded-lg hover:bg-indigo-500"
-            >
-              Adicionar
-            </button>
+            <input value={nameInput} onChange={e => setNameInput(e.target.value)} placeholder="Item" className="px-4 py-2 rounded-lg bg-slate-800" />
+            <input type="number" value={quantityInput} onChange={e => setQuantityInput(e.target.value)} placeholder="Qtd" className="px-4 py-2 rounded-lg bg-slate-800" />
+            <input type="text" value={priceInput} onChange={e => setPriceInput(e.target.value)} placeholder="Preço" className="px-4 py-2 rounded-lg bg-slate-800" />
+            <button onClick={addItem} className="bg-indigo-600 rounded-lg hover:bg-indigo-500">Adicionar</button>
           </div>
 
-          {/* HEADER */}
-          <div className="grid grid-cols-[24px_1fr_1fr_1fr_1fr_24px]
-                          text-slate-400 mb-2 px-4 gap-2">
-            <span className="text-center">✔</span>
-            <span>Item</span>
-            <span>Qtd</span>
-            <span>Preço</span>
-            <span>Total</span>
-            <span></span>
-          </div>
-
-          <h2 className="text-xl font-semibold mt-4 mb-2">
-            🛒 Pendentes
-          </h2>
-
-          <ul className="space-y-2">
-            {pendingItems.map(renderPendingItem)}
-          </ul>
-
-          {pendingItems.length === 0 && (
-            <p className="text-slate-500 mt-2">
-              Nenhum item pendente
-            </p>
-          )}
-        </div>
-
-        {/* PAINEL */}
-        <div className="lg:w-80 flex flex-col gap-4">
-
-          <div className="bg-slate-800 rounded-xl p-6 sticky top-4">
-            <p className="text-slate-400">Total pendente:</p>
-            <p className="text-3xl font-bold text-green-400 mb-4">
-              R$ {formatMoney(totalPendentes)}
-            </p>
-
-            <p className="text-slate-400">Total comprados:</p>
-            <p className="text-xl font-semibold text-indigo-400">
-              R$ {formatMoney(totalComprados)}
-            </p>
-          </div>
-
-          {/* COMPRADOS */}
-          <div className="bg-slate-800 rounded-xl p-4">
-            <h2 className="text-lg font-semibold mb-3">
-              ✅ Comprados
-            </h2>
-
-            <div className="grid grid-cols-[24px_1fr_1fr_1fr_24px]
-                            text-slate-400 mb-2 text-sm px-4 gap-2">
-              <span className="text-center">✔</span>
-              <span>Item</span>
-              <span>Qtd</span>
-              <span>Preço</span>
-              <span></span>
-            </div>
-
+          {loading ? <p>Carregando itens da VM2...</p> : (
             <ul className="space-y-2">
-              {boughtItems.map(renderBoughtItem)}
+              {items.map(item => (
+                <li key={item._id} className="grid grid-cols-[24px_1fr_1fr_1fr_24px] items-center bg-slate-800 px-4 py-3 rounded-lg gap-2">
+                  <input type="checkbox" checked={item.purchased} onChange={() => toggleBought(item._id, item.purchased)} />
+                  <span className={item.purchased ? "line-through opacity-50" : ""}>{item.name.value}</span>
+                  <span>{item.quantity.value}x</span>
+                  <span>R$ {formatMoney(item.price.value)}</span>
+                  <button onClick={() => removeItem(item._id)} className="text-red-400">✕</button>
+                </li>
+              ))}
             </ul>
-
-            {boughtItems.length === 0 && (
-              <p className="text-slate-500 text-sm">
-                Nenhum item comprado
-              </p>
-            )}
-          </div>
-
+          )}
         </div>
       </div>
     </Layout>
