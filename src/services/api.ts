@@ -1,10 +1,10 @@
 ﻿import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://api-insumos.alvarodev.duckdns.org',
+  // Forçamos o HTTPS do seu DuckDNS para evitar erro de Mixed Content na Vercel
+  baseURL: 'https://api-insumos.alvarodev.duckdns.org',
 });
 
-// Anexa o Token JWT automaticamente em todas as chamadas
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('@SCAI:token');
   if (token) {
