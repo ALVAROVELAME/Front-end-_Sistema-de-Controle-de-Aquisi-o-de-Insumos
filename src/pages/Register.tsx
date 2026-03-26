@@ -13,21 +13,39 @@ export function Register() {
 
   async function handleRegister() {
     if (!username || !email || !password) return alert("Preencha todos os campos");
+
+    console.log("--- 🕵️‍♂️ INICIANDO DIAGNÓSTICO DE CONEXÃO ---");
+    console.log("📍 URL ALVO:", api.defaults.baseURL + "/auth/register");
+    console.log("📦 DADOS ENVIADOS:", { username, email });
+
     try {
       setLoading(true);
       setError("");
-      console.log("Chamando API em:", api.defaults.baseURL);
       
-      await api.post("/auth/register", { username, email, password });
+      const response = await api.post("/auth/register", { username, email, password });
+      
+      console.log("✅ RESPOSTA DA API:", response.data);
       alert("Conta criada com sucesso!");
       navigate("/login");
     } catch (err: any) {
-      // Aqui vamos ver o erro real no F12
-      const apiError = err.response?.data?.message || err.message;
-      console.error("ERRO DETALHADO:", err);
-      setError(`Erro: ${apiError}`);
+      console.log("--- ❌ ERRO DETECTADO ---");
+      
+      if (err.response) {
+        // A API respondeu, mas com erro (ex: 400, 401, 500)
+        console.error("Status do Erro:", err.response.status);
+        console.error("Mensagem da API:", err.response.data);
+        setError(`Erro da API (${err.response.status}): ${err.response.data.message || 'Erro desconhecido'}`);
+      } else if (err.request) {
+        // A requisição foi feita mas não houve resposta (CORS ou Firewall)
+        console.error("Nenhuma resposta recebida. Possível erro de CORS ou SSL!");
+        setError("Network Error: O servidor não respondeu. Verifique o CORS ou Certificado SSL.");
+      } else {
+        console.error("Erro na configuração da requisição:", err.message);
+        setError(`Erro: ${err.message}`);
+      }
     } finally {
       setLoading(false);
+      console.log("--- 🏁 FIM DO DIAGNÓSTICO ---");
     }
   }
 
@@ -50,9 +68,6 @@ export function Register() {
         <button onClick={handleRegister} disabled={loading} className="w-full py-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition disabled:opacity-50 font-semibold">
           {loading ? "Processando..." : "Registrar"}
         </button>
-        <p className="text-sm text-center text-slate-400 mt-4">
-          Já tem conta? <span onClick={() => navigate("/login")} className="text-indigo-400 cursor-pointer hover:underline">Entrar</span>
-        </p>
       </div>
     </div>
   );
